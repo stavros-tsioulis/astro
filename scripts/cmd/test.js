@@ -1,6 +1,7 @@
 import { run } from 'node:test';
-import { spec } from 'node:test/reporters';
+import { spec, junit } from 'node:test/reporters';
 import fs from 'node:fs/promises';
+import { createWriteStream } from "node:fs"
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import arg from 'arg';
@@ -16,7 +17,9 @@ export default async function test() {
 		'--parallel': Boolean, // aka --test-concurrency: https://nodejs.org/api/test.html#test-runner-execution-model
 		'--watch': Boolean, // experimental: https://nodejs.org/api/test.html#watch-mode
 		'--timeout': Number, // Test timeout in milliseconds (default: 30000ms)
-		'--setup': String, // Test setup file
+		'--setup': String, // Test setup file,
+		'--junit': Boolean, // Use junit as reporter
+		'--junit-destination': String, // Destination file for junit-generated xml
 		// Aliases
 		'-m': '--match',
 		'-o': '--only',
@@ -54,7 +57,7 @@ export default async function test() {
 	}
 
 	// https://nodejs.org/api/test.html#runoptions
-	run({
+	const runner = run({
 		files,
 		testNamePatterns: args['--match'],
 		concurrency: args['--parallel'],
@@ -68,6 +71,15 @@ export default async function test() {
 			// so we set it here manually
 			process.exitCode = 1;
 		})
-		.pipe(new spec())
-		.pipe(process.stdout);
+
+	if (args['--junit'] && args['--junit-destination']) {
+		const stream = createWriteStream(args['--junit-destination'])
+		const generator = junit(runner)
+		for await (const chunk of generator)
+			stream.write(chunk)
+	} else {
+		runner
+			.pipe(new spec())
+			.pipe(process.stdout);
+	}
 }
